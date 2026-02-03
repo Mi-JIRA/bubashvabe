@@ -1,14 +1,26 @@
-from typing import Optional
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
+from twilio.twiml.messaging_response import MessagingResponse
 
 app = FastAPI()
 
+@app.get("/health")
+def health():
+    return {"ok": True}
 
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
+# тестовый endpoint — чтобы открыть в браузере и увидеть XML
+@app.get("/twiml")
+def twiml():
+    r = MessagingResponse()
+    r.message("test from Bubashvabe")
+    return Response(content=str(r), media_type="text/xml")
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Optional[str] = None):
-    return {"item_id": item_id, "q": q}
+@app.post("/whatsapp")
+async def whatsapp_webhook(request: Request):
+    form = await request.form()
+    text = (form.get("Body") or "").strip()
+
+    r = MessagingResponse()
+    r.message(f"🪲 Бубашвабе получил: {text}")
+
+    return Response(content=str(r), media_type="text/xml")
