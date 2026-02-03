@@ -102,4 +102,93 @@ def ask_openai(phone: str, user_text: str) -> str:
         return f"🪲 Бубашвабе получил: {user_text}"
 
     headers = {
-        "Autho
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": OPENAI_MODEL,
+        "input": _build_openai_input(phone, user_text),
+        "max_output_tokens": MAX_OUTPUT_TOKENS,
+    }
+
+    r = requests.post(
+        "https://api.openai.com/v1/responses",
+        headers=headers,
+        json=payload,
+        timeout=OPENAI_TIMEOUT_SEC,
+    )
+    r.raise_for_status()
+    data = r.json()
+
+    # основной путь
+    out = (data.get("output_text") or "").strip()
+    if out:
+        return out
+
+    # fallback: вытащим из output массива
+    chunks = []
+    for item in data.get("output", []):
+        for c in item.get("content", []):
+            if c.get("type") in ("output_text", "text") and c.get("text"):
+                chunks.append(c["text"])
+    out = "\n".join(chunks).strip()
+    return out or "🪲 Я задумался. Повтори, пожалуйста, ещё разок."
+
+
+# -----------------------------
+# Endpoints
+# -----------------------------
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
+@app.get("/twiml")
+def twiml_test():
+    """
+    Быстрая проверка, что Render отдаёт XML корректно.
+    Открой в браузере: https://<service>.onrender.com/twiml
+    """
+    r = MessagingResponse()
+    r.message("test from Bubashvabe")
+    return Response(content=str(r), media_type="text/xml")
+
+
+@app.post("/whatsapp")
+async def whatsapp_webhook(request: Request):
+    # Twilio присылает application/x-www-form-urlencoded
+    form = await request.form()
+    params = dict(form)
+
+    user_text = (params.get("Body") or "").strip()
+    from_number = (params.get("From") or "").strip()  # например "whatsapp:+123..."
+
+    # 1) Опциональная проверка подписи Twilio
+    if REQUIRE_TWILIO_SIGNATURE:
+        if not _validator or not TWILIO_AUTH_TOKEN:
+            raise HTTPException(status_code=500, detail="TWILIO_AUTH_TOKEN is not set")
+
+        signature = request.headers.get("X-Twilio-Signature", "")
+        url = _public_url(request)
+
+        if not _validator.validate(url, params, signature):
+            raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+
+    # 2) Базовая безопасность
+    if _is_sensitive(user_text):
+        answer = _safe_refusal()
+    else:
+        # 3) Память + OpenAI
+        _add_history(from_number, "user", user_text)
+        try:
+            answer = ask_openai(from_number, user_text)
+        except Exception:
+            answer = "🪲 У меня сейчас лапки заняты. Попробуй ещё раз через минутку."
+
+        _add_history(from_number, "assistant", answer)
+
+    # 4) TwiML ответ
+    tw = MessagingResponse()
+    tw.message(answer)
+    return Response(content=str(tw), media_type="text/xml")
