@@ -1,9 +1,15 @@
 services:
-  # A Docker web service
   - type: web
-    name: fastapi-example
-    runtime: python
-    plan: free
-    autoDeploy: false
-    buildCommand: pip install -r requirements.txt
+    name: twilio-whatsapp-bubashvabe
+    env: python
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: OPENAI_API_KEY
+      - key: OPENAI_MODEL
+      - key: BUBASHVABE_SYSTEM
+      - key: TWILIO_AUTH_TOKEN
+      - key: REQUIRE_TWILIO_SIGNATURE
+      - key: OPENAI_TIMEOUT_SEC
+      - key: MAX_OUTPUT_TOKENS
+      - key: MAX_HISTORY
