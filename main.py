@@ -153,3 +153,13 @@ async def whatsapp_webhook(request: Request) -> Response:
     resp = MessagingResponse()
     resp.message(reply_text)
     return Response(content=str(resp), media_type="text/xml")
+
+from fastapi.responses import Response
+
+@app.get("/", include_in_schema=False)
+def root():
+    return {"ok": True}
+
+@app.head("/", include_in_schema=False)
+def root_head():
+    return Response(status_code=200)
